@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.util.AsynchronousListenerBus
 
@@ -32,14 +32,20 @@ private[spark] class LiveListenerBus
   extends AsynchronousListenerBus[SparkListener, SparkListenerEvent]("SparkListenerBus")
   with SparkListenerBus {
 
-  private val logDroppedEvent = new AtomicBoolean(false)
+  private val logDroppedRate = new AtomicLong(System.currentTimeMillis() / 1000L + 2)
 
   override def onDropEvent(event: SparkListenerEvent): Unit = {
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
+
+    val curtime = System.currentTimeMillis() / 1000L
+    val last_log = logDroppedRate.get()
+
+    if (last_log < curtime) {
+      if (logDroppedRate.compareAndSet(last_log, curtime + 2)) {
+        logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
+          "This likely means one of the SparkListeners is too slow and cannot keep up with " +
+          "the rate at which tasks are being started by the scheduler.")
+        logError(event.toString)
+      }
     }
   }
 
