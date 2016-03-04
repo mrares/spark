@@ -17,16 +17,21 @@
 
 package org.apache.spark.ml.classification
 
+import java.io._
+import com.twitter.chill.Input
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{BytesWritable, NullWritable}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
@@ -43,7 +48,7 @@ import org.apache.spark.sql.functions._
 final class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
-  with RandomForestParams with TreeClassifierParams {
+  with RandomForestParams with TreeClassifierParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfc"))
@@ -147,7 +152,10 @@ final class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with TreeEnsembleModel with Serializable {
+  with TreeEnsembleModel with Serializable with MLWritable {
+
+  override def write: MLWriter =
+    new RandomForestClassificationModel.RandomForestClassificationModelWriter(this)
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
@@ -242,7 +250,12 @@ final class RandomForestClassificationModel private[ml] (
   }
 }
 
-private[ml] object RandomForestClassificationModel {
+private[ml] object RandomForestClassificationModel
+  extends MLReadable[RandomForestClassificationModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[RandomForestClassificationModel] =
+    new RandomForestClassificationModelReader
 
   /** (private[ml]) Convert a model from the old API */
   def fromOld(
@@ -259,5 +272,55 @@ private[ml] object RandomForestClassificationModel {
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
     new RandomForestClassificationModel(uid, newTrees, numFeatures, numClasses)
+  }
+
+  private[RandomForestClassificationModel]
+  class RandomForestClassificationModelWriter(instance: RandomForestClassificationModel)
+    extends MLWriter {
+    @Since("1.6.0")
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val rawModelPath = new Path(path, "rfdata_raw").toString
+      val kryoSerializer = new KryoSerializer(sc.getConf)
+      sc.parallelize(Seq(instance), 1).mapPartitions(iter => iter.grouped(10).map(_.toArray))
+        .map( x => {
+          val kryo = kryoSerializer.newKryo()
+          val output = kryoSerializer.newKryoOutput()
+          val bao = new ByteArrayOutputStream()
+          output.setOutputStream(bao)
+          kryo.writeClassAndObject(output, x)
+          output.close()
+
+          val byteWritable = new BytesWritable(bao.toByteArray)
+          (NullWritable.get(), byteWritable)
+        }
+        ).saveAsSequenceFile(rawModelPath)
+
+//      sc.parallelize(Seq(instance), 1).saveAsObjectFile(rawModelPath)
+    }
+  }
+
+  private[RandomForestClassificationModel]
+  class RandomForestClassificationModelReader
+  extends MLReader[RandomForestClassificationModel] {
+    @Since("1.6.0")
+    override def load(path: String): RandomForestClassificationModel = {
+      val rawModelPath = new Path(path, "rfdata_raw").toString
+
+//      val linRegModel = sc.objectFile[RandomForestClassificationModel](rawModelPath).first()
+
+      val kryoSerializer = new KryoSerializer(sc.getConf)
+      val linRegModel = sc.sequenceFile(rawModelPath,
+        classOf[NullWritable], classOf[BytesWritable], 1).flatMap(x => {
+        val kryo = kryoSerializer.newKryo()
+        val input = new Input()
+        input.setBuffer(x._2.getBytes)
+        val data = kryo.readClassAndObject(input)
+        val dataObject = data.asInstanceOf[Array[RandomForestClassificationModel]]
+        dataObject
+      }).first()
+
+      return linRegModel
+    }
   }
 }
