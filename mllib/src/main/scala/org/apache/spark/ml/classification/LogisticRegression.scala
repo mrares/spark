@@ -44,7 +44,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold {
+  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
 
   /**
    * Set threshold in binary classification, in range [0, 1].
@@ -247,6 +247,10 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
+  @Since("1.6.0")
+  def setTreeAggregateDepth(value: Int): this.type = set(aggregationDepth, value)
+  setDefault(aggregationDepth -> 2)
+
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
@@ -268,7 +272,8 @@ class LogisticRegression @Since("1.2.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
+        new MultivariateOnlineSummarizer, new MultiClassSummarizer)(
+        seqOp, combOp, $(aggregationDepth))
     }
 
     val histogram = labelSummarizer.histogram
@@ -297,7 +302,7 @@ class LogisticRegression @Since("1.2.0") (
     val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
     val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept), $(standardization),
-      featuresStd, featuresMean, regParamL2)
+      featuresStd, featuresMean, regParamL2, $(aggregationDepth))
 
     val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -1003,7 +1008,8 @@ private class LogisticCostFun(
     standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
-    regParamL2: Double) extends DiffFunction[BDV[Double]] {
+    regParamL2: Double,
+    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
@@ -1015,7 +1021,7 @@ private class LogisticCostFun(
 
       instances.treeAggregate(
         new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
-      )(seqOp, combOp)
+      )(seqOp, combOp, aggregationDepth)
     }
 
     val totalGradientArray = logisticAggregator.gradient.toArray

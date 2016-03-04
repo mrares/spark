@@ -37,7 +37,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassif
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol):
+                         HasWeightCol, HasAggregationDepth):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -81,12 +81,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  threshold=0.5, thresholds=None, probabilityCol="probability",
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None):
+                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None, aggregationDepth=2):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None)
+                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None, aggregationDepth=2)
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -106,7 +106,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None):
+                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, aggregationDepth=2):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \

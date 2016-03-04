@@ -344,6 +344,17 @@ private[ml] trait HasStepSize extends Params {
 }
 
 /**
+  * Trait for aggregation depth
+  */
+private[ml] trait HasAggregationDepth extends Params {
+
+  final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "Aggregation depth to be used during each iteration.")
+
+  /** @group getParam */
+  final def getAggregationDepth: Int = $(aggregationDepth)
+}
+
+/**
  * Trait for shared param weightCol.
  */
 private[ml] trait HasWeightCol extends Params {

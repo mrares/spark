@@ -431,6 +431,31 @@ class HasStepSize(Params):
         """
         return self.getOrDefault(self.stepSize)
 
+class HasAggregationDepth(Params):
+    """
+    Mixin for param aggregationDepth: Aggregation depth for each iteration of treeAggregation.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    aggregationDepth = Param(Params._dummy(), "aggregationDepth", "Aggregation depth to be used during each iteration.")
+
+    def __init__(self):
+        super(HasAggregationDepth, self).__init__()
+        #: param for aggregation depth to be used for each iteration of treeAggregation.
+        self.aggregationDepth = Param(self, "aggregationDepth", "Aggregation depth to be used during each iteration.")
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        self._paramMap[self.aggregationDepth] = value
+        return self
+
+    def getAggregationDepth(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.aggregationDepth)
 
 class HasHandleInvalid(Params):
     """
